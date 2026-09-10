@@ -4,3 +4,6 @@
 
 ## Bài 2:
 ![alt text](image/image-1.png)
+
+## Bài 3:
+![alt text](image/image-2.png)
