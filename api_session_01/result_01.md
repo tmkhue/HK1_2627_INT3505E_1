@@ -1,5 +1,6 @@
 # Kết quả chạy Week 1
 ## Bài 1: Hello API
-![alt text](image.png)
+![alt text](image/image.png)
 
 ## Bài 2:
+![alt text](image/image-1.png)
