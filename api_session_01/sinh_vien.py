@@ -37,7 +37,6 @@ def get_student(student_id):
 
 @app.route("/students", methods=["GET"])
 def students_by_name():
-    limit = int(request.args.get("limit", 10))
     min_gpa = request.args.get("gpa", type=float)
     student_name = request.args.get("name", "").strip().lower()
 
