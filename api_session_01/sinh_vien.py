@@ -69,15 +69,40 @@ def students_select():
         res = [s for s in res if s.get("year", 0) == school_year]
     return jsonify({"students": res}), 200
 
-@app.route("/students/<int:student_id>", methods=["DELETE"])
-def remove_student(student_id):
+@app.route("/students/<int:student_id>", methods=["PUT", "DELETE"])
+def modify_student(student_id):
     student = STUDENT[student_id-1]
     if student is None:
         return jsonify({"error": "Khong tim thay"}), 404
-    if student["gpa"] > 1:
-        return jsonify({"error": "Khong the xoa sinh vien"}), 409
-    STUDENT.pop(student_id-1)
-    return"", 204
+    
+    if request.method == "PUT":
+        body = request.get_json(silent=True) or {}
+        name = body.get("name")
+        gpa = body.get("gpa")
+        year = body.get("year")
+        if not name or gpa is None or year is None:
+            return jsonify({"error": "Nhap du thong tin name, gpa, year"}), 400
+        
+        if not isinstance(gpa, (float, int)):
+            return {"error": "GPA phai la so"}, 400
+        if not (0<=gpa<=4.0):
+            return {"error": "GPA khong hop le"}, 400
+
+        if not isinstance(year, int) or isinstance(year, bool):
+            return jsonify({"error": "Nam hoc phai la so"}), 400
+        if not (1<=year<=4):
+            return jsonify({"error": "Nam hoc khong hop le"}), 400
+        
+        student["name"] = name.strip()
+        student["gpa"] = float(gpa)
+        student["year"] = int(year)
+        return jsonify({"message": "Da cap nhat", "student": student}), 200
+
+    if request.method == "DELETE":
+        if student["gpa"] > 1:
+            return jsonify({"error": "Khong the xoa sinh vien"}), 409
+        STUDENT.pop(student_id-1)
+        return"", 204
     
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)

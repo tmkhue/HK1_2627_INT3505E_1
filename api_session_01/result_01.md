@@ -45,3 +45,13 @@ Connection: close
     }
   ]
 }
+
+## Bài 6: mở rộng
+127.0.0.1 - - [13/Sep/2026 01:13:23] "PUT /students/1 HTTP/1.1" 200 -
+127.0.0.1 - - [13/Sep/2026 01:15:29] "GET /students HTTP/1.1" 200 -
+127.0.0.1 - - [13/Sep/2026 01:16:28] "GET /students?gpa=3.6 HTTP/1.1" 200 -
+127.0.0.1 - - [13/Sep/2026 01:17:43] "POST /students/1 HTTP/1.1" 405 -
+127.0.0.1 - - [13/Sep/2026 01:18:23] "POST /students HTTP/1.1" 201 -
+127.0.0.1 - - [13/Sep/2026 01:19:40] "DELETE /students/1 HTTP/1.1" 409 -
+127.0.0.1 - - [13/Sep/2026 01:20:47] "POST /students HTTP/1.1" 201 -
+127.0.0.1 - - [13/Sep/2026 01:20:52] "DELETE /students/6 HTTP/1.1" 204 -
