@@ -55,3 +55,9 @@ Connection: close
 127.0.0.1 - - [13/Sep/2026 01:19:40] "DELETE /students/1 HTTP/1.1" 409 -
 127.0.0.1 - - [13/Sep/2026 01:20:47] "POST /students HTTP/1.1" 201 -
 127.0.0.1 - - [13/Sep/2026 01:20:52] "DELETE /students/6 HTTP/1.1" 204 -
+
+# Week 2
+## Bài 1:
+![alt text](image/image-4.png)
+## Bài 2:
+![alt text](image/image-3.png)
