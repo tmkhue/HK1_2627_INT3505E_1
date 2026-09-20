@@ -1,8 +1,49 @@
 from flask import Flask, jsonify, request, make_response
+import sqlite3
 app = Flask(__name__)
-BOOKS = []
+DB_FILE = "books.db"
 _next_id = 1
 DEFAULT_SIZE, MAX_SIZE = 20, 100
+
+def get_db():
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    with get_db() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS books (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        author TEXT NOT NULL
+                    )""")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                book_id INTEGER,
+                quantity INTEGER,
+                FOREIGN KEY (book_id) REFERENCES books (id)
+            )
+        """)
+        
+        cursor = conn.execute("SELECT COUNT(*) FROM books")
+        if cursor.fetchone()[0] == 0:
+            sample_books = [
+                ("Clean code", "Martin"),
+                ("Hello World", "Khue"),
+                ("Fairy Princess", "Cho Miyeon")
+            ]
+            conn.executemany("INSERT INTO books (title, author) VALUES (?, ?)", sample_books)
+            
+            sample_orders = [
+                (1, 2),
+                (2, 1)
+            ]
+            conn.executemany("INSERT INTO orders (book_id, quantity) VALUES (?, ?)", sample_orders)
+            conn.commit()
+
+init_db()
 
 # ─── GET /books —— trả danh sách
 @app.get("/books")
@@ -16,21 +57,29 @@ def list_books():
     page = max(page, 1)
     size = max(min(size, MAX_SIZE), 1)
 
-    flt = BOOKS
+    query = "SELECT id, title, author FROM books Where 1=1"
+    params = []
+
     a = request.args.get("author")
     if a:
-        flt = [b for b in flt if b["author"].lower() == a.lower()]
-
+        query += " AND LOWER(author) = LOWER(?)"
+        params.append(a)
     q = (request.args.get("q")or"").lower()
     if q:
-        flt = [b for b in flt if q in b["title"].lower()]
-    if not flt:
+        query += " AND LOWER(title) LIKE LOWER(?)"
+        params.append(f"%{q}%")
+    if not params:
         return jsonify(error="Khong tim thay"), 404
 
-    total = len(flt)
-    start = (page - 1)*size
-    end = start + size
-    items = flt[start:end]
+    with get_db() as conn:
+        count_query = f"SELECT COUNT(*) FROM ({query})"
+        total = conn.execute(count_query, params).fetchone()[0]
+        start = (page - 1)*size
+        query += " LIMIT ? OFFSET ?"
+        params.extend([size, start])
+        cursor = conn.execute(query, params)
+        items = [dict(row) for row in cursor.fetchall()]
+
     last =(total+size-1)//size
 
     #HATEOAS: tạo đường link và dẫn tới nó theo từng phần
@@ -41,7 +90,7 @@ def list_books():
              "last":{"href":max(last, 1)}}
     if page > 1:
         links["prev"]={"href":u(page-1)}
-    if end < total:
+    if page*size < total:
         links["next"] = {"href":u(page+1)}
     body = {"data":items,
             "pagination":{"page":page,"size":size,"total":total,"total_pages":last},
@@ -53,7 +102,6 @@ def list_books():
 # ─── POST /books —— tạo mới
 @app.post("/books")
 def create_book():
-    global _next_id
     if not request.is_json:
         return jsonify(error="expected JSON"), 415
     p = request.get_json(silent=True) or {}
@@ -62,8 +110,10 @@ def create_book():
     if not t or not a:
         return jsonify(error="title and author required"), 422
     book = {"id": _next_id, "title": t, "author": a}
-    BOOKS.append(book)
-    _next_id += 1
+    with get_db() as conn:
+        cursor = conn.execute("INSERT INTO books (title, author) VALUES (?, ?)", (t, a))
+        conn.commit()
+        book["id"] = cursor.lastrowid
     resp = make_response(jsonify(book), 201)
     resp.headers["Location"] = f"/books/{book['id']}"
     return resp
@@ -71,47 +121,68 @@ def create_book():
 # ─── GET /books/<id> ─── cache 60s
 @app.get("/books/<int:bid>")
 def fetch(bid):
-    i = next((k for k,b in enumerate(BOOKS) if b["id"]==bid), None)
-    if i is None: 
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, title, author FROM books WHERE id = ?", (bid,)
+        ).fetchone()
+    if row is None:
         return jsonify(error="not found"), 404
-    resp = make_response(jsonify(BOOKS[i]), 200)
+    resp = make_response(jsonify(dict(row)), 200)
     resp.headers["Cache-Control"]="max-age=60"
     return resp
 
 # ─── PUT ─── thay toàn bộ, title+author bắt buộc
 @app.put("/books/<int:bid>")
 def put(bid):
-    i = next((k for k,b in enumerate(BOOKS) if b["id"]==bid), None)
-    if i is None: 
-        return jsonify(error="not found"), 404
     p = request.get_json(silent=True) or {}
-    t,a = p.get("title"), p.get("author")
-    if not t or not a: 
+    t, a = p.get("title"), p.get("author")
+    if not t or not a:
         return jsonify(error="need title+author"), 422
-    BOOKS[i]={"id":bid,"title":t.strip(),"author":a.strip(),
-              "isbn":p.get("isbn"),"price":p.get("price")}
-    return jsonify(BOOKS[i]), 200
+    with get_db() as conn:
+        cursor = conn.execute(
+            "UPDATE books SET title = ?, author = ? WHERE id = ?",
+            (t.strip(), a.strip(), bid),
+        )
+        if cursor.rowcount == 0:
+            return jsonify(error="not found"), 404
+        row = conn.execute(
+            "SELECT id, title, author FROM books WHERE id = ?", (bid,)
+        ).fetchone()
+    return jsonify(dict(row)), 200
 
 # ─── PATCH ─── chỉ cập nhật field có trong body
 @app.patch("/books/<int:bid>")
 def patch(bid):
-    i = next((k for k,b in enumerate(BOOKS) if b["id"]==bid), None)
-    if i is None: 
-        return jsonify(error="not found"), 404
     p = request.get_json(silent=True) or {}
-    if p.get("price", 0) < 0:
-        return jsonify(error="price must be positive"), 422
-    for k in"title author isbn price".split():
-        if k in p: BOOKS[i][k] = p[k]
-    return jsonify(BOOKS[i]), 200
+    fields = {k: p[k] for k in ("title", "author") if k in p}
+    if "title" in fields:
+        fields["title"] = str(fields["title"]).strip()
+    if "author" in fields:
+        fields["author"] = str(fields["author"]).strip()
+    if any(not value for value in fields.values()):
+        return jsonify(error="title and author cannot be empty"), 422
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM books WHERE id = ?", (bid,)).fetchone()
+        if row is None:
+            return jsonify(error="not found"), 404
+        if fields:
+            assignments = ", ".join(f"{key} = ?" for key in fields)
+            conn.execute(
+                f"UPDATE books SET {assignments} WHERE id = ?",
+                (*fields.values(), bid),
+            )
+        row = conn.execute(
+            "SELECT id, title, author FROM books WHERE id = ?", (bid,)
+        ).fetchone()
+    return jsonify(dict(row)), 200
 
 # ─── DELETE ─── idempotent, trả 204
 @app.delete("/books/<int:bid>")
 def delete(bid):
-    i = next((k for k,b in enumerate(BOOKS) if b["id"]==bid), None)
-    if i is None: 
+    with get_db() as conn:
+        cursor = conn.execute("DELETE FROM books WHERE id = ?", (bid,))
+    if cursor.rowcount == 0:
         return jsonify(error="not found"), 404
-    BOOKS.pop(i)
     return "", 204
 
 if __name__ == "__main__":
