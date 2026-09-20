@@ -2,13 +2,51 @@ from flask import Flask, jsonify, request, make_response
 app = Flask(__name__)
 BOOKS = []
 _next_id = 1
+DEFAULT_SIZE, MAX_SIZE = 20, 100
+
 # ─── GET /books —— trả danh sách
 @app.get("/books")
 def list_books():
-    return jsonify({
-                    "data": BOOKS,
-                    "total": len(BOOKS)
-                    }), 200
+    try:
+        page = int(request.args.get("page", 1))
+        size = int(request.args.get("size",DEFAULT_SIZE))
+    except ValueError:
+        return jsonify(error="So trang phai la so nguyen"), 400
+
+    page = max(page, 1)
+    size = max(min(size, MAX_SIZE), 1)
+
+    flt = BOOKS
+    a = request.args.get("author")
+    if a:
+        flt = [b for b in flt if b["author"].lower() == a.lower()]
+
+    q = (request.args.get("q")or"").lower()
+    if q:
+        flt = [b for b in flt if q in b["title"].lower()]
+
+    total = len(flt)
+    start = (page - 1)*size
+    end = start + size
+    items = flt[start:end]
+    last =(total+size-1)//size
+
+    #HATEOAS: tạo đường link và dẫn tới nó theo từng phần
+    def u(p):
+        return f"/books?page={p}&size={size}"
+    links = {"self":{"href":u(page)},
+             "first":{"href":u(1)},
+             "last":{"href":max(last, 1)}}
+    if page > 1:
+        links["prev"]={"href":u(page-1)}
+    if end < total:
+        links["next"] = {"href":u(page+1)}
+    body = {"data":items,
+            "pagination":{"page":page,"size":size,"total":total,"total_pages":last},
+            "_links":links}
+    resp = make_response(jsonify(body), 200)
+    resp.headers["Cache-Control"]="public, max-age=30"
+    return resp
 
 # ─── POST /books —— tạo mới
 @app.post("/books")

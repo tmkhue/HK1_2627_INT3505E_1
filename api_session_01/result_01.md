@@ -61,3 +61,13 @@ Connection: close
 ![alt text](image/image-4.png)
 ## Bài 2:
 ![alt text](image/image-3.png)
+## Bài 3:
+127.0.0.1 - - [20/Sep/2026 15:47:49] "GET /books HTTP/1.1" 200 -
+127.0.0.1 - - [20/Sep/2026 15:49:42] "POST /books HTTP/1.1" 201 -
+127.0.0.1 - - [20/Sep/2026 15:56:26] "POST /books HTTP/1.1" 201 -
+127.0.0.1 - - [20/Sep/2026 15:56:44] "POST /books HTTP/1.1" 201 -
+127.0.0.1 - - [20/Sep/2026 15:58:57] "GET /books?page=2&size=1 HTTP/1.1" 200 -
+127.0.0.1 - - [20/Sep/2026 15:59:42] "GET /books?author=Khue HTTP/1.1" 200 -
+127.0.0.1 - - [20/Sep/2026 15:59:58] "GET /books?author=Cho-Miyeon HTTP/1.1" 200 -
+127.0.0.1 - - [20/Sep/2026 16:01:20] "GET /books?author=Cho%20Miyeon HTTP/1.1" 200 -
+127.0.0.1 - - [20/Sep/2026 16:02:12] "GET /books?q=clean HTTP/1.1" 200 -
