@@ -31,15 +31,10 @@ def init_db():
         if cursor.fetchone()[0] == 0:
             sample_books = [
                 ("Clean code", "Martin"),
-                ("Hello World", "Khue"),
-                ("Fairy Princess", "Cho Miyeon")
             ]
             conn.executemany("INSERT INTO books (title, author) VALUES (?, ?)", sample_books)
             
-            sample_orders = [
-                (1, 2),
-                (2, 1)
-            ]
+            sample_orders = []
             conn.executemany("INSERT INTO orders (book_id, quantity) VALUES (?, ?)", sample_orders)
             conn.commit()
 
@@ -99,6 +94,38 @@ def list_books():
     resp.headers["Cache-Control"]="public, max-age=30"
     return resp
 
+@app.get("/books/<int:bid>/orders")
+def list_orders(bid):
+    with get_db() as conn:
+        book_row = conn.execute(
+            "SELECT id, title, author FROM books WHERE id = ?", (bid,)
+        ).fetchone()
+        if book_row is None:
+            return jsonify(error="not found"), 404
+        orders = conn.execute(
+            "SELECT id, quantity FROM orders WHERE book_id = ?", (bid,)
+        ).fetchall()
+    orders_list = [dict(order) for order in orders]
+    response_body = {
+        "book": dict(book_row),
+        "orders": orders_list
+    }
+    return jsonify(response_body), 200
+
+@app.get("/books/orders/<int:oid>")
+def get_order(oid):
+    with get_db() as conn:
+        order_row = conn.execute(
+            "SELECT id, title, author FROM books WHERE id = (SELECT book_id FROM orders WHERE id = ?)", (oid,)
+        ).fetchone()
+        if order_row is None:
+            return jsonify(error="book not found"), 404
+
+    response_body = {
+        "order": dict(order_row)
+    }
+    return jsonify(response_body), 200
+
 # ─── POST /books —— tạo mới
 @app.post("/books")
 def create_book():
@@ -116,6 +143,33 @@ def create_book():
         book["id"] = cursor.lastrowid
     resp = make_response(jsonify(book), 201)
     resp.headers["Location"] = f"/books/{book['id']}"
+    return resp
+
+@app.post("/books/<int:bid>/orders")
+def create_order(bid):
+    if not request.is_json:
+        return jsonify(error="expected JSON"), 415
+    p = request.get_json(silent=True) or {}
+    quantity = p.get("quantity")
+    if not isinstance(quantity, int) or quantity <= 0:
+        return jsonify(error="quantity must be a positive integer"), 422
+
+    with get_db() as conn:
+        book_row = conn.execute(
+            "SELECT id FROM books WHERE id = ?", (bid,)
+        ).fetchone()
+        if book_row is None:
+            return jsonify(error="book not found"), 404
+
+        cursor = conn.execute(
+            "INSERT INTO orders (book_id, quantity) VALUES (?, ?)", (bid, quantity)
+        )
+        conn.commit()
+        order_id = cursor.lastrowid
+
+    order = {"id": order_id, "book_id": bid, "quantity": quantity}
+    resp = make_response(jsonify(order), 201)
+    resp.headers["Location"] = f"/books/{bid}/orders/{order_id}"
     return resp
 
 # ─── GET /books/<id> ─── cache 60s
