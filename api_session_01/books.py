@@ -24,6 +24,8 @@ def list_books():
     q = (request.args.get("q")or"").lower()
     if q:
         flt = [b for b in flt if q in b["title"].lower()]
+    if not flt:
+        return jsonify(error="Khong tim thay"), 404
 
     total = len(flt)
     start = (page - 1)*size
