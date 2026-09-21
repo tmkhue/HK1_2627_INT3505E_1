@@ -1,5 +1,7 @@
 from flask import Flask, jsonify, request, make_response
 import sqlite3
+import hashlib
+import json
 app = Flask(__name__)
 DB_FILE = "books.db"
 _next_id = 1
@@ -63,8 +65,6 @@ def list_books():
     if q:
         query += " AND LOWER(title) LIKE LOWER(?)"
         params.append(f"%{q}%")
-    if not params:
-        return jsonify(error="Khong tim thay"), 404
 
     with get_db() as conn:
         count_query = f"SELECT COUNT(*) FROM ({query})"
@@ -90,7 +90,20 @@ def list_books():
     body = {"data":items,
             "pagination":{"page":page,"size":size,"total":total,"total_pages":last},
             "_links":links}
+
+    body_string = json.dumps(body, sort_keys=True)
+    
+    etag = f'"{hashlib.md5(body_string.encode("utf-8")).hexdigest()}"'
+
+    if_none_match = request.headers.get("If-None-Match")
+    
+    if if_none_match == etag:
+        resp = make_response("", 304)
+        resp.headers["ETag"] = etag
+        return resp
+    
     resp = make_response(jsonify(body), 200)
+    resp.headers["ETag"] = etag
     resp.headers["Cache-Control"]="public, max-age=30"
     return resp
 
