@@ -1,8 +1,6 @@
 from datetime import datetime
 from flask import Flask, jsonify, request
-
 app = Flask(__name__)
-
 USERS = [
     {"id": 1, "name": "Tran Minh A", "bio": "", "followers": [], "following": []},
     {"id": 2, "name": "Nguyen Van B", "bio": "", "followers": [], "following": []},
@@ -12,23 +10,17 @@ USERS = [
 POSTS = []
 COMMENTS = []
 _next_ids = {"user": 5, "post": 1, "comment": 1}
-
-
 def find_user(user_id):
     return next((user for user in USERS if user["id"] == int(user_id)), None)
-
 
 def find_post(post_id):
     return next((post for post in POSTS if post["id"] == int(post_id)), None)
 
-
 def find_comment(comment_id):
     return next((comment for comment in COMMENTS if comment["id"] == int(comment_id)), None)
 
-
 def error(message, status):
     return jsonify({"error": message}), status
-
 
 def json_body():
     if not request.is_json:
@@ -38,11 +30,9 @@ def json_body():
         return None, error("JSON body phải là một object", 400)
     return body, None
 
-
 def user_public(user):
     """Thông tin hồ sơ không trả toàn bộ danh sách quan hệ trong mỗi bài viết."""
     return {"id": user["id"], "name": user["name"], "bio": user["bio"]}
-
 
 @app.get("/users")
 def list_users():
@@ -50,7 +40,6 @@ def list_users():
     users = [user_public(user) for user in USERS
              if not query or query in user["name"].casefold()]
     return jsonify({"users": users}), 200
-
 
 @app.post("/users")
 def create_user():
@@ -66,14 +55,12 @@ def create_user():
     USERS.append(user)
     return jsonify(user_public(user)), 201
 
-
 @app.get("/users/<int:user_id>")
 def get_user(user_id):
     user = find_user(user_id)
     if user is None:
         return error("Không tìm thấy user", 404)
     return jsonify(user_public(user)), 200
-
 
 @app.route("/users/<int:user_id>", methods=["PUT", "PATCH"])
 def update_user(user_id):
@@ -94,7 +81,6 @@ def update_user(user_id):
         user["bio"] = body["bio"].strip()
     return jsonify(user_public(user)), 200
 
-
 @app.delete("/users/<int:user_id>")
 def delete_user(user_id):
     user = find_user(user_id)
@@ -110,7 +96,6 @@ def delete_user(user_id):
                    if comment["user_id"] != user_id and comment["post_id"] not in removed_post_ids]
     return "", 204
 
-
 @app.get("/users/<int:user_id>/profile")
 def get_profile(user_id):
     user = find_user(user_id)
@@ -119,58 +104,59 @@ def get_profile(user_id):
     return jsonify({**user_public(user), "followers_count": len(user["followers"]),
                     "following_count": len(user["following"])}), 200
 
-
 @app.put("/users/<int:user_id>/profile")
 @app.patch("/users/<int:user_id>/profile")
 def update_profile(user_id):
     return update_user(user_id)
 
+@app.post("/users/<int:user_id>/following")
+def follow_author(user_id):
+    data = request.get_json(silent=True) or {}
+    user2_id = data.get("user2_id")
+    if not isinstance(user2_id, int):
+        return error("user2_id hợp lệ là bắt buộc", 400)
+    user, user2 = find_user(user_id), find_user(user2_id)
+    if user is None or user2 is None:
+        return error("Khong tim thay user hoac tac gia", 404)
+    if user_id == user2_id:
+        return error("Khong the tu theo doi chinh minh", 400)
+    if user2_id not in user["following"]:
+        user["following"].append(user2_id)
+        user2["followers"].append(user_id)
+    return jsonify({"message": "da theo doi thanh cong", "user2_id": user2_id}), 200
 
-@app.post("/users/<int:user_id>/follow/<int:author_id>")
-def follow_author(user_id, author_id):
-    user, author = find_user(user_id), find_user(author_id)
-    if user is None or author is None:
-        return error("Không tìm thấy user hoặc tác giả", 404)
-    if user_id == author_id:
-        return error("Không thể tự theo dõi chính mình", 400)
-    if author_id not in user["following"]:
-        user["following"].append(author_id)
-        author["followers"].append(user_id)
-    return jsonify({"message": "Đã theo dõi tác giả", "author_id": author_id}), 200
-
-
-@app.delete("/users/<int:user_id>/follow/<int:author_id>")
-def unfollow_author(user_id, author_id):
-    user, author = find_user(user_id), find_user(author_id)
-    if user is None or author is None:
-        return error("Không tìm thấy user hoặc tác giả", 404)
-    if author_id in user["following"]:
-        user["following"].remove(author_id)
-        author["followers"].remove(user_id)
+@app.delete("/users/<int:user_id>/following")
+def unfollow_author(user_id):
+    data = request.get_json(silent=True) or {}
+    user2_id = data.get("user2_id")
+    if not isinstance(user2_id, int):
+        return error("user2_id la bat buoc", 400)
+    user, user2 = find_user(user_id), find_user(user2_id)
+    if user is None or user2 is None:
+        return error("Khong tim thay user hoac tac gia", 404)
+    if user2_id in user["following"]:
+        user["following"].remove(user2_id)
+        user2["followers"].remove(user_id)
     return "", 204
-
 
 @app.get("/users/<int:user_id>/following")
 def list_following(user_id):
     user = find_user(user_id)
     if user is None:
-        return error("Không tìm thấy user", 404)
+        return error("Khong tim thay user", 404)
     return jsonify({"users": [user_public(find_user(uid)) for uid in user["following"]]}), 200
-
 
 @app.get("/users/<int:user_id>/followers")
 def list_followers(user_id):
     user = find_user(user_id)
     if user is None:
-        return error("Không tìm thấy user", 404)
+        return error("Khong tim thay user", 404)
     return jsonify({"users": [user_public(find_user(uid)) for uid in user["followers"]]}), 200
-
 
 def post_view(post):
     author = find_user(post["user_id"])
     return {**post, "author": user_public(author) if author else None,
             "comments_count": sum(c["post_id"] == post["id"] for c in COMMENTS)}
-
 
 @app.get("/posts")
 def list_posts():
@@ -181,14 +167,12 @@ def list_posts():
              (author_id is None or post["user_id"] == author_id)]
     return jsonify({"posts": posts}), 200
 
-
 @app.post("/posts")
 def create_post():
     body, failure = json_body()
     if failure:
         return failure
     return make_post(body)
-
 
 def make_post(body):
     user_id = body.get("user_id")
@@ -209,20 +193,18 @@ def make_post(body):
     POSTS.append(post)
     return jsonify(post_view(post)), 201
 
-
 @app.get("/posts/<int:post_id>")
 def get_post(post_id):
     post = find_post(post_id)
     if post is None:
-        return error("Không tìm thấy bài viết", 404)
+        return error("Khong tim thay bai viet", 404)
     return jsonify(post_view(post)), 200
-
 
 @app.route("/posts/<int:post_id>", methods=["PUT", "PATCH"])
 def update_post(post_id):
     post = find_post(post_id)
     if post is None:
-        return error("Không tìm thấy bài viết", 404)
+        return error("Khong tim thay bai viet", 404)
     body, failure = json_body()
     if failure:
         return failure
@@ -238,23 +220,20 @@ def update_post(post_id):
         post["tags"] = sorted({tag.strip().casefold() for tag in body["tags"]})
     return jsonify(post_view(post)), 200
 
-
 @app.delete("/posts/<int:post_id>")
 def delete_post(post_id):
     post = find_post(post_id)
     if post is None:
-        return error("Không tìm thấy bài viết", 404)
+        return error("Khong tim thay bai viet", 404)
     POSTS.remove(post)
     COMMENTS[:] = [comment for comment in COMMENTS if comment["post_id"] != post_id]
     return "", 204
-
 
 @app.get("/users/<int:user_id>/posts")
 def list_user_posts(user_id):
     if find_user(user_id) is None:
         return error("Không tìm thấy user", 404)
     return jsonify({"posts": [post_view(post) for post in POSTS if post["user_id"] == user_id]}), 200
-
 
 @app.post("/users/<int:user_id>/posts")
 def create_user_post(user_id):
@@ -266,7 +245,6 @@ def create_user_post(user_id):
     body["user_id"] = user_id
     return make_post(body)
 
-
 @app.get("/users/<int:user_id>/feed")
 def user_feed(user_id):
     user = find_user(user_id)
@@ -276,7 +254,6 @@ def user_feed(user_id):
     return jsonify({"posts": [post_view(post) for post in reversed(POSTS)
                               if post["user_id"] in followed]}), 200
 
-
 @app.get("/posts/<int:post_id>/comments")
 def list_comments(post_id):
     if find_post(post_id) is None:
@@ -284,7 +261,6 @@ def list_comments(post_id):
     comments = [{**comment, "author": user_public(find_user(comment["user_id"]))}
                 for comment in COMMENTS if comment["post_id"] == post_id]
     return jsonify({"comments": comments}), 200
-
 
 @app.post("/posts/<int:post_id>/comments")
 def create_comment(post_id):
@@ -305,7 +281,6 @@ def create_comment(post_id):
     COMMENTS.append(comment)
     return jsonify({**comment, "author": user_public(find_user(user_id))}), 201
 
-
 @app.route("/comments/<int:comment_id>", methods=["PUT", "PATCH"])
 def update_comment(comment_id):
     comment = find_comment(comment_id)
@@ -320,7 +295,6 @@ def update_comment(comment_id):
     comment["content"] = content
     return jsonify(comment), 200
 
-
 @app.delete("/comments/<int:comment_id>")
 def delete_comment(comment_id):
     comment = find_comment(comment_id)
@@ -329,14 +303,12 @@ def delete_comment(comment_id):
     COMMENTS.remove(comment)
     return "", 204
 
-
 @app.get("/posts/<int:post_id>/tags")
 def list_post_tags(post_id):
     post = find_post(post_id)
     if post is None:
         return error("Không tìm thấy bài viết", 404)
     return jsonify({"tags": post["tags"]}), 200
-
 
 @app.post("/posts/<int:post_id>/tags")
 def add_post_tag(post_id):
@@ -355,7 +327,6 @@ def add_post_tag(post_id):
         post["tags"].sort()
     return jsonify({"post_id": post_id, "tags": post["tags"]}), 201
 
-
 @app.delete("/posts/<int:post_id>/tags/<path:tag_name>")
 def remove_post_tag(post_id, tag_name):
     post = find_post(post_id)
@@ -367,12 +338,10 @@ def remove_post_tag(post_id, tag_name):
     post["tags"].remove(tag)
     return "", 204
 
-
 @app.get("/tags/<path:tag_name>/posts")
 def posts_by_tag(tag_name):
     tag = tag_name.strip().casefold()
     return jsonify({"posts": [post_view(post) for post in POSTS if tag in post["tags"]]}), 200
-
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)
