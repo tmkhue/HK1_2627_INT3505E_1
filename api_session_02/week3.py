@@ -1,5 +1,34 @@
 from datetime import datetime
 from flask import Flask, jsonify, request
+from werkzeug.exceptions import HTTPException
+import uuid
+
+ERROR_BASE = "https://example.com/problems"
+
+class ApiProblem(Exception):
+    def __init__(self, status, title, detail=None, type_path=None, **extra):
+        self.status = status
+        self.title = title
+        self.detail = detail
+        self.type_path = type_path
+        self.extra = extra
+
+def _problem(status, title, detail=None, type_path=None, **extra):
+    body = {
+        "type": f"{ERROR_BASE}/{type_path}" if type_path is not None else "about:blank",
+        "title": title,
+        "status": status,
+        "instance": request.path,
+        "trace_id": str(uuid.uuid4()),
+    }
+    if detail is not None:
+        body["detail"] = detail
+    body.update(extra)
+    response = jsonify(body)
+    response.status_code = status
+    response.headers["Content-Type"] = "application/problem+json"
+    return response
+
 app = Flask(__name__)
 USERS = [
     {"id": 1, "name": "Tran Minh A", "bio": "", "followers": [], "following": []},
@@ -20,7 +49,40 @@ def find_comment(comment_id):
     return next((comment for comment in COMMENTS if comment["id"] == int(comment_id)), None)
 
 def error(message, status):
-    return jsonify({"error": message}), status
+    raise ApiProblem(status=status, title=_status_title(status), detail=message)
+
+def _status_title(status):
+    titles = {
+        400: "Bad Request",
+        401: "Unauthorized",
+        403: "Forbidden",
+        404: "Not Found",
+        405: "Method Not Allowed",
+        409: "Conflict",
+        415: "Unsupported Media Type",
+        422: "Unprocessable Content",
+        429: "Too Many Requests",
+        500: "Internal Server Error",
+    }
+    return titles.get(status, "HTTP Error")
+
+@app.errorhandler(ApiProblem)
+def handle_api_problem(problem):
+    return _problem(
+        status=problem.status,
+        title=problem.title,
+        detail=problem.detail,
+        type_path=problem.type_path,
+        **problem.extra,
+    )
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(exception):
+    return _problem(
+        status=exception.code or 500,
+        title=exception.name,
+        detail=exception.description,
+    )
 
 def json_body():
     if not request.is_json:
@@ -48,7 +110,11 @@ def create_user():
         return failure
     name = body.get("name", "").strip()
     if not name:
-        return error("name là bắt buộc", 400)
+        raise ApiProblem(
+            status=400, 
+            title="Bad Request", 
+            detail="name là bắt buộc", 
+            type_path="missing-name")
     user = {"id": _next_ids["user"], "name": name,
             "bio": body.get("bio", "").strip(), "followers": [], "following": []}
     _next_ids["user"] += 1
@@ -59,7 +125,12 @@ def create_user():
 def get_user(user_id):
     user = find_user(user_id)
     if user is None:
-        return error("Không tìm thấy user", 404)
+        raise ApiProblem(
+            status=404, 
+            title="Khong tim thay user", 
+            type_path="user-not-found",
+            resource_id=user_id,
+            )
     return jsonify(user_public(user)), 200
 
 @app.route("/users/<int:user_id>", methods=["PUT", "PATCH"])

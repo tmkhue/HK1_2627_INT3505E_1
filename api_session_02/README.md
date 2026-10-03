@@ -56,3 +56,10 @@ graph TD;
 ![alt text](image-8.png)
 - POST /users/[id]/following
 ![alt text](image-9.png)
+
+## Lab 2
+- Error handler
+    * GET /users/[id] với id không hợp lệ
+![alt text](image-10.png)
+    * POST /users với content không hợp lệ
+![alt text](image-11.png)
