@@ -1,6 +1,9 @@
 from datetime import datetime
 from flask import Flask, jsonify, request
 from werkzeug.exceptions import HTTPException
+import base64
+import binascii
+import json
 import uuid
 
 ERROR_BASE = "https://example.com/problems"
@@ -96,12 +99,83 @@ def user_public(user):
     """Thông tin hồ sơ không trả toàn bộ danh sách quan hệ trong mỗi bài viết."""
     return {"id": user["id"], "name": user["name"], "bio": user["bio"]}
 
+def _encode_cursor(sort_value, item_id, sort_field, descending):
+    payload = json.dumps([sort_field, descending, sort_value, item_id], separators=(",", ":"))
+    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
+
+def _decode_cursor(cursor, sort_field, descending):
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+        if (not isinstance(payload, list) or len(payload) != 4 or
+                payload[0] != sort_field or payload[1] is not descending or
+                not isinstance(payload[3], int)):
+            raise ValueError
+        return payload[2], payload[3]
+    except (ValueError, TypeError, json.JSONDecodeError, binascii.Error):
+        raise ApiProblem(400, "Bad Request", "cursor khong hop le hoac khong khop voi sort")
+
+def collection_page(key, items, allowed_fields, filter_fields):
+    items = list(items)
+    for parameter, expected in request.args.items():
+        if parameter.startswith("filter[") and parameter.endswith("]"):
+            field = parameter[7:-1]
+            if field not in filter_fields:
+                raise ApiProblem(400, "Bad Request", f"Khong ho tro filter cho field '{field}'")
+            needle = expected.strip().casefold()
+            items = [item for item in items if
+                     (needle in [str(value).casefold() for value in item.get(field, [])]
+                      if isinstance(item.get(field), list) else
+                      needle in str(item.get(field, "")).casefold())]
+
+    sort_parameter = request.args.get("sort", "id")
+    descending = sort_parameter.startswith("-")
+    sort_field = sort_parameter[1:] if descending else sort_parameter
+    if sort_field not in allowed_fields or "," in sort_field:
+        raise ApiProblem(400, "Bad Request", "sort phai thuoc filter fields va them dau '-' de sap xep giam dan")
+    if any(not isinstance(item.get(sort_field), (str, int, float)) for item in items):
+        raise ApiProblem(400, "Bad Request", f"Khong the sort theo field '{sort_field}'")
+
+    try:
+        limit = int(request.args.get("limit", 20))
+    except ValueError:
+        raise ApiProblem(400, "Bad Request", "limit phai la so nguyen")
+    if not 1 <= limit <= 100:
+        raise ApiProblem(400, "Bad Request", "limit phai nam trong khoang 1 den 100")
+
+    items.sort(key=lambda item: (item.get(sort_field), item.get("id", 0)), reverse=descending)
+    cursor = request.args.get("cursor")
+    if cursor:
+        last_value, last_id = _decode_cursor(cursor, sort_field, descending)
+        boundary = (last_value, last_id)
+        items = [item for item in items if
+                 ((item.get(sort_field), item.get("id", 0)) < boundary if descending
+                  else (item.get(sort_field), item.get("id", 0)) > boundary)]
+
+    page = items[:limit + 1]
+    has_more = len(page) > limit
+    page = page[:limit]
+    fields_parameter = request.args.get("fields")
+    if fields_parameter:
+        fields = {field.strip() for field in fields_parameter.split(",") if field.strip()}
+        invalid = fields - allowed_fields
+        if invalid:
+            raise ApiProblem(400, "Bad Request", f"Field khong hop le: {', '.join(sorted(invalid))}")
+        page = [{field: value for field, value in item.items() if field in fields} for item in page]
+
+    next_cursor = None
+    if has_more and page:
+        last_item = items[limit - 1]
+        next_cursor = _encode_cursor(last_item[sort_field], last_item.get("id", 0), sort_field, descending)
+    return jsonify({key: page, "page": {"limit": limit, "has_more": has_more,
+                                         "next_cursor": next_cursor}}), 200
+
 @app.get("/users")
 def list_users():
     query = request.args.get("name", "").strip().casefold()
     users = [user_public(user) for user in USERS
              if not query or query in user["name"].casefold()]
-    return jsonify({"users": users}), 200
+    return collection_page("users", users, {"id", "name", "bio"}, {"id", "name", "bio"})
 
 @app.post("/users")
 def create_user():
@@ -215,14 +289,16 @@ def list_following(user_id):
     user = find_user(user_id)
     if user is None:
         return error("Khong tim thay user", 404)
-    return jsonify({"users": [user_public(find_user(uid)) for uid in user["following"]]}), 200
+    users = [user_public(find_user(uid)) for uid in user["following"]]
+    return collection_page("users", users, {"id", "name", "bio"}, {"id", "name", "bio"})
 
 @app.get("/users/<int:user_id>/followers")
 def list_followers(user_id):
     user = find_user(user_id)
     if user is None:
         return error("Khong tim thay user", 404)
-    return jsonify({"users": [user_public(find_user(uid)) for uid in user["followers"]]}), 200
+    users = [user_public(find_user(uid)) for uid in user["followers"]]
+    return collection_page("users", users, {"id", "name", "bio"}, {"id", "name", "bio"})
 
 def post_view(post):
     author = find_user(post["user_id"])
@@ -236,7 +312,8 @@ def list_posts():
     posts = [post_view(post) for post in POSTS
              if (not tag or tag in post["tags"]) and
              (author_id is None or post["user_id"] == author_id)]
-    return jsonify({"posts": posts}), 200
+    fields = {"id", "user_id", "title", "content", "tags", "created_at", "author", "comments_count"}
+    return collection_page("posts", posts, fields, {"id", "user_id", "title", "content", "tags"})
 
 @app.post("/posts")
 def create_post():
@@ -304,7 +381,9 @@ def delete_post(post_id):
 def list_user_posts(user_id):
     if find_user(user_id) is None:
         return error("Không tìm thấy user", 404)
-    return jsonify({"posts": [post_view(post) for post in POSTS if post["user_id"] == user_id]}), 200
+    posts = [post_view(post) for post in POSTS if post["user_id"] == user_id]
+    fields = {"id", "user_id", "title", "content", "tags", "created_at", "author", "comments_count"}
+    return collection_page("posts", posts, fields, {"id", "user_id", "title", "content", "tags"})
 
 @app.post("/users/<int:user_id>/posts")
 def create_user_post(user_id):
@@ -322,8 +401,9 @@ def user_feed(user_id):
     if user is None:
         return error("Không tìm thấy user", 404)
     followed = set(user["following"])
-    return jsonify({"posts": [post_view(post) for post in reversed(POSTS)
-                              if post["user_id"] in followed]}), 200
+    posts = [post_view(post) for post in POSTS if post["user_id"] in followed]
+    fields = {"id", "user_id", "title", "content", "tags", "created_at", "author", "comments_count"}
+    return collection_page("posts", posts, fields, {"id", "user_id", "title", "content", "tags"})
 
 @app.get("/posts/<int:post_id>/comments")
 def list_comments(post_id):
@@ -331,7 +411,9 @@ def list_comments(post_id):
         return error("Không tìm thấy bài viết", 404)
     comments = [{**comment, "author": user_public(find_user(comment["user_id"]))}
                 for comment in COMMENTS if comment["post_id"] == post_id]
-    return jsonify({"comments": comments}), 200
+    return collection_page("comments", comments,
+                           {"id", "post_id", "user_id", "content", "author"},
+                           {"id", "post_id", "user_id", "content"})
 
 @app.post("/posts/<int:post_id>/comments")
 def create_comment(post_id):
@@ -412,7 +494,9 @@ def remove_post_tag(post_id, tag_name):
 @app.get("/tags/<path:tag_name>/posts")
 def posts_by_tag(tag_name):
     tag = tag_name.strip().casefold()
-    return jsonify({"posts": [post_view(post) for post in POSTS if tag in post["tags"]]}), 200
+    posts = [post_view(post) for post in POSTS if tag in post["tags"]]
+    fields = {"id", "user_id", "title", "content", "tags", "created_at", "author", "comments_count"}
+    return collection_page("posts", posts, fields, {"id", "user_id", "title", "content", "tags"})
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=5000, debug=True)

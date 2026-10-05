@@ -63,3 +63,13 @@ graph TD;
 ![alt text](image-10.png)
     * POST /users với content không hợp lệ
 ![alt text](image-11.png)
+
+## Lab 3
+- GET /users?limit=
+![alt text](image-12.png)
+- Thay next_cursor để chuyển sang trang tiếp
+![alt text](image-13.png)
+- Sort theo id và tên theo thứ tự giảm dần
+![alt text](image-14.png)
+- Cursor với field không hợp lệ
+![alt text](image-15.png)
