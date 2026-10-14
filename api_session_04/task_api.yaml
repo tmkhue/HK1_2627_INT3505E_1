@@ -1,0 +1,284 @@
+openapi: 3.0.3
+info:
+  title: Tasks API
+  version: 1.0.0
+  description: Quản lý task nội bộ
+servers:
+  - url: http://localhost:5000/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: tasks
+    description: Quản lý công việc
+paths:
+  /tasks:
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: Lấy danh sách task
+      parameters:
+        - $ref: '#/components/parameters/PageLimit'
+        - $ref: '#/components/parameters/StatusFilter'
+      responses:
+        '200':
+          description: Danh sách task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskPage'
+              example:
+                items:
+                  - id: 550e8400-e29b-41d4-a716-446655440000
+                    title: Hoàn thành tài liệu API
+                    description: Viết hướng dẫn sử dụng API
+                    status: in_progress
+                    createdAt: '2026-10-07T09:00:00Z'
+                limit: 20
+                nextCursor: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [tasks]
+      operationId: createTask
+      summary: Tạo task mới
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskInput'
+            example:
+              title: Hoàn thành tài liệu API
+              description: Viết hướng dẫn sử dụng API
+      responses:
+        '201':
+          description: Task đã được tạo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+              example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                title: Hoàn thành tài liệu API
+                description: Viết hướng dẫn sử dụng API
+                status: todo
+                createdAt: '2026-10-07T09:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [tasks]
+      operationId: getTaskById
+      summary: Lấy task theo ID
+      responses:
+        '200':
+          description: Thông tin task
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+              example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                title: Hoàn thành tài liệu API
+                description: Viết hướng dẫn sử dụng API
+                status: in_progress
+                createdAt: '2026-10-07T09:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [tasks]
+      operationId: patchTask
+      summary: Cập nhật task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskInput'
+            example:
+              status: done
+      responses:
+        '200':
+          description: Task đã được cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+              example:
+                id: 550e8400-e29b-41d4-a716-446655440000
+                title: Hoàn thành tài liệu API
+                description: Viết hướng dẫn sử dụng API
+                status: done
+                createdAt: '2026-10-07T09:00:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+    delete:
+      tags: [tasks]
+      operationId: deleteTask
+      summary: Xóa task
+      responses:
+        '204':
+          description: Task đã được xóa, không có response body
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PageLimit:
+      name: limit
+      in: query
+      description: Số task tối đa trả về
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      example: 20
+    StatusFilter:
+      name: status
+      in: query
+      description: Lọc task theo trạng thái
+      schema:
+        $ref: '#/components/schemas/TaskStatus'
+      example: in_progress
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: 550e8400-e29b-41d4-a716-446655440000
+  schemas:
+    TaskStatus:
+      type: string
+      enum: [todo, in_progress, done]
+    CreateTaskInput:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          example: Hoàn thành tài liệu API
+        description:
+          type: string
+          example: Viết hướng dẫn sử dụng API
+    UpdateTaskInput:
+      type: object
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+    Task:
+      type: object
+      required: [id, title, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/TaskStatus'
+        createdAt:
+          type: string
+          format: date-time
+    TaskPage:
+      type: object
+      required: [items, limit, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        limit:
+          type: integer
+        nextCursor:
+          type: string
+          nullable: true
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+    UnauthorizedError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          example: unauthorized
+        message:
+          type: string
+          example: Thiếu hoặc token không hợp lệ
+  responses:
+    Unauthorized:
+      description: Chưa xác thực hoặc token không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnauthorizedError'
+          example:
+            code: unauthorized
+            message: Thiếu hoặc token không hợp lệ
+    NotFound:
+      description: Không tìm thấy task
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: not_found
+            message: Không tìm thấy task
+    ValidationError:
+      description: Dữ liệu đầu vào không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+          example:
+            code: validation_error
+            message: Dữ liệu không hợp lệ
+            details:
+              - field: title
+                message: Trường này là bắt buộc
+e: bearer
+bearerFormat: JWT
