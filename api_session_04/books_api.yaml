@@ -1,0 +1,257 @@
+openapi: 3.0.3
+info:
+  title: Books API
+  version: 1.0.0
+  description: Quản lý sách nội bộ
+servers:
+  - url: http://localhost:5000/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: books
+    description: Quản lý sách
+paths:
+  /books:
+    post:
+      tags: [books]
+      operationId: createBook
+      summary: Tạo sách mới
+      description: Tạo sách mới với tiêu đề, tác giả, isbn và giá tiền. Chỉ có thể tạo sách mới khi đã xác thực.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookInput'
+            example:
+              title: Lập trình Python cơ bản
+              author: Nguyễn Văn An
+              isbn: 9786040000000
+              price: 120000
+      responses:
+        '201':
+          description: BookCreated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookCreated'
+              example:
+                title: Lập trình Python cơ bản
+                author: Nguyễn Văn An
+                isbn: 9786040000000
+                price: 120000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+  /books/{bookId}:
+    patch:
+      tags: [books]
+      operationId: patchBook
+      summary: Cập nhật sách
+      description: Cập nhật thông tin sách theo ID. Gửi ít nhất 1 mục trong title, author, isbn hoặc price để cập nhật. Không nhận id, mục lạ hoặc null.
+      security:
+        - bearerAuth: []
+      parameters:
+      - name: bookId
+        in: path
+        required: true
+        description: ID của sách cần cập nhật
+        schema:
+          type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBookInput'
+      responses:
+        '200':
+          description: Sách đã được cập nhật
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+              example:
+                bookId: 1
+                title: Lập trình Python cơ bản
+                author: Nguyễn Văn An
+                isbn: 9786040000000
+                price: 120000
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        default:
+          $ref: '#/components/responses/UnexpectedError'
+components:
+  schemas:
+    Book:
+      type: object
+      properties:
+        bookId:
+          type: integer
+          format: int64
+          description: ID của sách
+        title:
+          type: string
+          description: Tiêu đề sách
+        isbn:
+          type: string
+          description: ISBN của sách
+        price:
+          type: integer
+          format: int64
+          description: Giá của sách theo VND
+    CreateBookInput:
+      type: object
+      required:
+        - title
+        - author
+        - isbn
+        - price
+      properties:
+        title:
+          type: string
+          description: Tiêu đề sách
+        author:
+          type: string
+          description: Tác giả sách
+        isbn:
+          type: string
+          description: ISBN của sách
+        price:
+          type: integer
+          format: int64
+          description: Giá của sách theo VND
+    UpdateBookInput:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Tiêu đề sách
+        author:
+          type: string
+          description: Tác giả sách
+        isbn:
+          type: string
+          description: ISBN của sách
+        price:
+          type: integer
+          format: int64
+          description: Giá của sách theo VND
+    Error:
+      type: object
+      required: [type, title, status, detail, instance]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI định danh loại lỗi
+        title:
+          type: string
+          description: Tiêu đề lỗi
+        status:
+          type: integer
+          format: int32
+          description: Mã trạng thái HTTP của lỗi
+        detail:
+          type: string
+          description: Chi tiết về lỗi
+        instance:
+          type: string
+          format: uri
+          description: URI định danh lỗi cụ thể
+  responses:
+    BookCreated:
+      description: Sách đã được tạo thành công.
+      headers:
+        Location:
+          description: Đường dẫn tới sách vừa được tạo.
+          schema:
+            type: string
+          example: "/v1/books/1"
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Book'
+          example:
+            id: 1
+            title: "Tên sách mới"
+            author: "Tác giả"
+            isbn: "978-0134494166"
+            price: 90000
+    BadRequest:
+      description: Dữ liệu đầu vào không hợp lệ
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            type: about:blank
+            title: Bad Request
+            status: 400
+            detail: Dữ liệu đầu vào không hợp lệ.
+            instance: /v1/books/1
+    Unauthorized:
+      description: Chưa xác thực hoặc token không hợp lệ
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            type: about:blank
+            title: Unauthorized
+            status: 401
+            detail: Chưa xác thực hoặc token không hợp lệ.
+            instance: /v1/books/1
+    NotFound:
+      description: Không tìm thấy book
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            type: about:blank
+            title: Not Found
+            status: 404
+            detail: Không tìm thấy sách có bookId bằng 1.
+            instance: /v1/books/1
+    UnexpectedError:
+      description: Lỗi không xác định
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            type: about:blank
+            title: Internal Server Error
+            status: 500
+            detail: Lỗi không xác định
+    ValidationError:
+      description: Dữ liệu đầu vào không hợp lệ
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            type: about:blank
+            title: Unprocessable Entity
+            status: 422
+            detail: Dữ liệu không hợp lệ
+            instance: /v1/books/1
+securitySchemes:
+  bearerAuth:
+    type: http
+    scheme: bearer
+    bearerFormat: JWT
