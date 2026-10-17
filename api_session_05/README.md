@@ -154,3 +154,17 @@ Mỗi phần tử trong `items` chỉ định một sách và số lượng thu�
 ## ER Diagram
 
 ![Library entity relationship diagram](ER-SOA05.drawio.png)
+
+## Test endpoints
+### Tạo 1 sách mới
+![alt text](image-1.png)
+![alt text](image.png)
+
+### Tạo tác giả mới
+![alt text](image-2.png)
+
+### Tạo customer
+![alt text](image-3.png)
+
+### Tạo 1 đơn thuê sách
+![alt text](image-4.png)
