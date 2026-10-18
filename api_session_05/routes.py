@@ -1,11 +1,13 @@
 from datetime import datetime, time
-
+import base64
+import binascii
+import json
 from flask import Flask, request
 from marshmallow import ValidationError
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
-from models import Author, Book, Category, Customer, RentalItem, RentalOrder, Review, db
+from models import Author, Book, Category, Customer, RentalItem, RentalOrder, Review, book_author, book_category, db
 from schemas import (
     AuthorSchema,
     BookSchema,
@@ -27,6 +29,48 @@ rental_order_schema = RentalOrderSchema()
 review_create_schema = ReviewCreateSchema()
 review_schema = ReviewSchema()
 
+ALLOWED_SORT_FIELDS = {"title", "price", "bookId", "customerId", "orderId", "authorId", "category"}
+
+SORT_EXPRESSIONS = {
+    "title": func.coalesce(Book.title, ""),
+    "price": func.coalesce(Book.price, -1),
+    "bookId": func.coalesce(Book.book_id, -1),
+    "authorId": func.coalesce(
+        select(Author.author_id)
+        .join(book_author, Author.author_id == book_author.c.author_id)
+        .where(book_author.c.book_id == Book.book_id)
+        .order_by(Author.author_id)
+        .limit(1)
+        .scalar_subquery(),
+        -1,
+    ),
+    "category": func.coalesce(
+        select(Category.name)
+        .join(book_category, book_category.c.categories == Category.name)
+        .where(book_category.c.bookId == Book.book_id)
+        .order_by(Category.name)
+        .limit(1)
+        .scalar_subquery(),
+        "",
+    ),
+    "orderId": func.coalesce(
+        select(RentalItem.order_id)
+        .where(RentalItem.book_id == Book.book_id)
+        .order_by(RentalItem.order_id)
+        .limit(1)
+        .scalar_subquery(),
+        -1,
+    ),
+    "customerId": func.coalesce(
+        select(RentalOrder.customer_id)
+        .join(RentalItem, RentalItem.order_id == RentalOrder.order_id)
+        .where(RentalItem.book_id == Book.book_id)
+        .order_by(RentalOrder.customer_id)
+        .limit(1)
+        .scalar_subquery(),
+        -1,
+    ),
+}
 
 def load_json(schema, partial=False):
     data = request.get_json()
@@ -70,10 +114,133 @@ def commit_or_conflict():
         return {"error": "Database constraint violation"}, 409
 
 
+def parse_sort(sort_value):
+    sort_keys = []
+    for entry in sort_value.split(","):
+        entry = entry.strip()
+        if not entry:
+            raise ValueError("Sort keys cannot be empty")
+        if ":" in entry:
+            field, direction = entry.rsplit(":", 1)
+            if direction.lower() not in {"asc", "desc"}:
+                raise ValueError("Sort direction must be asc or desc")
+            descending = direction.lower() == "desc"
+        else:
+            descending = entry.startswith("-")
+            field = entry[1:] if entry[:1] in {"-", "+"} else entry
+        if field not in ALLOWED_SORT_FIELDS:
+            raise ValueError(f"Unsupported sort field: {field}")
+        if field in {name for name, _ in sort_keys}:
+            raise ValueError(f"Duplicate sort field: {field}")
+        sort_keys.append((field, descending))
+    if "bookId" not in {field for field, _ in sort_keys}:
+        sort_keys.append(("bookId", False))
+    return sort_keys
+
+
+def encode_cursor(values, sort_keys, category):
+    payload = json.dumps(
+        {
+            "values": values,
+            "sort": [[field, "desc" if descending else "asc"] for field, descending in sort_keys],
+            "genre": category,
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def decode_cursor(token, sort_keys, genre):
+    try:
+        padded = token + "=" * (-len(token) % 4)
+        values = json.loads(base64.urlsafe_b64decode(padded).decode("utf-8"))
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        raise ValueError("Invalid cursor")
+    expected_sort = [[field, "desc" if descending else "asc"] for field, descending in sort_keys]
+    if not isinstance(values, dict) or values.get("sort") != expected_sort or values.get("genre") != genre:
+        raise ValueError("Cursor does not match the selected sort keys")
+    cursor_values = values.get("values")
+    if not isinstance(cursor_values, list) or len(cursor_values) != len(sort_keys):
+        raise ValueError("Invalid cursor values")
+    return cursor_values
+
+
 @app.get("/books")
-def get_books():
-    books = db.session.scalars(select(Book)).all()
-    return book_schema.dump(books, many=True), 200
+def list_books():
+    strategy = request.args.get("strategy", "offset").lower()
+    if strategy not in {"offset", "cursor"}:
+        return {"error": "strategy must be offset or cursor"}, 400
+    try:
+        limit = int(request.args.get("limit", 20))
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        sort_keys = parse_sort(request.args.get("sort", "bookId"))
+    except ValueError as error:
+        return {"error": str(error)}, 400
+
+    expressions = [SORT_EXPRESSIONS[field] for field, _ in sort_keys]
+    ordering = [
+        expression.desc() if descending else expression.asc()
+        for expression, (_, descending) in zip(expressions, sort_keys)
+    ]
+    query = select(Book, *expressions)
+    genre = request.args.get("genre")
+    if genre is not None:
+        genre = genre.strip()
+        if not genre:
+            return {"error": "genre cannot be empty"}, 400
+        query = query.where(Book.categories.any(Category.name == genre))
+
+    if strategy == "offset":
+        try:
+            offset = int(request.args.get("offset", 0))
+            if offset < 0:
+                raise ValueError("offset must be zero or greater")
+        except ValueError as error:
+            return {"error": str(error)}, 400
+        rows = db.session.execute(
+            query.order_by(*ordering).offset(offset).limit(limit + 1)
+        ).all()
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+        return {
+            "items": book_schema.dump([row[0] for row in rows], many=True),
+            "pagination": {
+                "strategy": "offset",
+                "limit": limit,
+                "offset": offset,
+                "hasMore": has_more,
+                "nextOffset": offset + limit if has_more else None,
+            },
+        }, 200
+
+    token = request.args.get("cursor")
+    if token:
+        try:
+            last_values = decode_cursor(token, sort_keys, genre)
+        except ValueError as error:
+            return {"error": str(error)}, 400
+        after_cursor = []
+        preceding_equalities = []
+        for expression, (_, descending), last_value in zip(expressions, sort_keys, last_values):
+            comparison = expression < last_value if descending else expression > last_value
+            after_cursor.append(and_(*preceding_equalities, comparison))
+            preceding_equalities.append(expression == last_value)
+        query = query.where(or_(*after_cursor))
+
+    rows = db.session.execute(query.order_by(*ordering).limit(limit + 1)).all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    next_cursor = encode_cursor(list(rows[-1][1:]), sort_keys, genre) if has_more and rows else None
+    return {
+        "items": book_schema.dump([row[0] for row in rows], many=True),
+        "pagination": {
+            "strategy": "cursor",
+            "limit": limit,
+            "hasMore": has_more,
+            "nextCursor": next_cursor,
+        },
+    }, 200
 
 
 @app.post("/books")
