@@ -1,4 +1,4 @@
-# Library API — BTVN Week 5
+# Library API — BTVN Week 5 - Lab 1
 
 JSON Schemas
 ## Book
@@ -168,3 +168,11 @@ Mỗi phần tử trong `items` chỉ định một sách và số lượng thu�
 
 ### Tạo 1 đơn thuê sách
 ![alt text](image-4.png)
+
+# Library API — BTVN Week 5 - Lab 2
+
+## Pagination Cursor
+![alt text](image-5.png)
+
+## Pagination Offset
+![alt text](image-6.png)
