@@ -1,0 +1,264 @@
+openapi: 3.0.3
+info:
+  title: Social Network API
+  description: API dịch vụ mạng xã hội với cơ chế xác thực JWT và phân quyền theo Scope.
+  version: 1.0.0
+
+servers:
+  - url: [suspicious link removed]
+    description: Production Server
+  - url: http://localhost:5000/v1
+    description: Local Development Server
+
+paths:
+  /auth/login:
+    post:
+      summary: Login
+      description: >-
+        Public endpoint; no token or scope is required. Invalid credentials return
+        401, malformed JSON returns 400, invalid field values return 422, and
+        rate limiting returns 429.
+      x-required-scopes: []
+      operationId: login
+      tags:
+        - Authentication
+      security: []  # Công khai, không yêu cầu token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful, returns tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '422':
+          $ref: '#/components/responses/422ValidationError'
+        '429':
+          $ref: '#/components/responses/429TooManyRequests'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+
+  /auth/refresh:
+    post:
+      summary: Refresh Access Token
+      description: >-
+        Requires a valid, unexpired Refresh Token with the `auth:refresh` scope.
+        Missing, invalid, expired, or revoked tokens return 401. A valid token
+        without the required scope, or an access token used in its place, returns 403.
+      x-required-scopes:
+        - auth:refresh
+      operationId: refreshToken
+      tags:
+        - Authentication
+      security:
+        - bearerAuth: [] # Yêu cầu Refresh Token trong Header Authorization
+      responses:
+        '200':
+          description: New Access Token issued successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenResponse'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '429':
+          $ref: '#/components/responses/429TooManyRequests'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+
+  /posts/{id}:
+    get:
+      summary: Get Post by ID
+      description: >-
+        Returns a post by its UUID or ID. Requires a valid Access Token with the
+        `posts:read` scope. Missing or invalid tokens return 401; a missing scope
+        or access denied by the resource authorization policy returns 403; an
+        unknown post returns 404.
+      x-required-scopes:
+        - posts:read
+      operationId: getPostById
+      tags:
+        - Posts
+      security:
+        - bearerAuth: [] # Scope is documented by x-required-scopes above.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID hoặc ID của bài viết
+          schema:
+            type: string
+            example: "post_99a8b7c6"
+      responses:
+        '200':
+          description: Returns detailed information of the post
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          $ref: '#/components/responses/400BadRequest'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+        '404':
+          $ref: '#/components/responses/404NotFound'
+        '500':
+          $ref: '#/components/responses/500InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Nhập JWT Access Token hoặc Refresh Token dưới dạng: Bearer <token>"
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        password:
+          type: string
+          format: password
+          example: "P@ssw0rd123!"
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          example: "Bearer"
+        expires_in:
+          type: integer
+          description: Thời gian sống của Access Token (tính bằng giây)
+          example: 900
+
+    RefreshTokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          example: "Bearer"
+        expires_in:
+          type: integer
+          example: 900
+
+    Post:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "post_99a8b7c6"
+        author_id:
+          type: string
+          example: "user_12345"
+        content:
+          type: string
+          example: "Hôm nay thời tiết thật đẹp!"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-10-24T06:00:00Z"
+        likes_count:
+          type: integer
+          example: 42
+
+    # Schema lỗi theo chuẩn RFC 7807 Problem Details
+    ProblemDetails:
+      type: object
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri
+          example: "[suspicious link removed]"
+        title:
+          type: string
+          example: "Xác thực không thành công"
+        status:
+          type: integer
+          example: 401
+        detail:
+          type: string
+          example: "Token không hợp lệ hoặc đã hết hạn."
+        instance:
+          type: string
+          example: "/v1/posts/post_99a8b7c6"
+
+  responses:
+    400BadRequest:
+      description: Request không hợp lệ (sai cú pháp JSON)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    401Unauthorized:
+      description: Chưa xác thực hoặc Token không hợp lệ / sai thông tin đăng nhập
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    403Forbidden:
+      description: Không đủ quyền (Thiếu scope hoặc vi phạm BOLA)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    404NotFound:
+      description: Không tìm thấy tài nguyên
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    422ValidationError:
+      description: Dữ liệu đầu vào vi phạm quy tắc validation (email sai format)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    429TooManyRequests:
+      description: Vượt quá tần suất gọi API (Rate Limit)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    500InternalError:
+      description: Lỗi máy chủ nội bộ
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
