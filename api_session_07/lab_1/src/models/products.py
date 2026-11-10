@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from datetime import datetime
 from typing import Optional
 from flask.views import MethodView
@@ -7,7 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from ..api.schemas import ProductIn, ProductPatch, ProductOut, ProductPaginationOut
 from ..extensions import db
-from flask_smorest import Blueprint, abort
+from flask_smorest import Blueprint
+from ..errors import ProductNotFoundError, ProductOutOfStockError
 
 product_bp = Blueprint("products", __name__, url_prefix="/api/v1/products")
 
@@ -61,7 +63,7 @@ class get_product(MethodView):
     def get(self, product_id):
         product = db.session.get(Product, product_id)
         if not product or product.archived:
-            abort(404, message="Product not found")
+            raise ProductNotFoundError()
         return product
 
 @product_bp.route("/")
@@ -69,7 +71,7 @@ class create_product(MethodView):
     @product_bp.arguments(ProductIn)
     @product_bp.response(201, ProductOut)
     def post(self, product_data):
-        product = Product(**product_data)
+        product = Product(**asdict(product_data))
         db.session.add(product)
         db.session.commit()
         return product
@@ -80,9 +82,9 @@ class reserve_product(MethodView):
     def post(self, product_id):
         product = db.session.get(Product, product_id)
         if not product or product.archived:
-            abort(404, message="Product not found")
+            raise ProductNotFoundError()
         if product.qty_in_stock <= 0:
-            abort(400, message="Product out of stock")
+            raise ProductOutOfStockError()
         product.qty_in_stock -= 1
         db.session.commit()
         return product
@@ -94,7 +96,7 @@ class update_product(MethodView):
     def patch(self, product_data, product_id):
         product = db.session.get(Product, product_id)
         if not product or product.archived:
-            abort(404, message="Product not found")
+            raise ProductNotFoundError()
         for key, value in product_data.items():
             setattr(product, key, value)
         db.session.commit()
@@ -106,7 +108,7 @@ class delete_product(MethodView):
     def delete(self, product_id):
         product = db.session.get(Product, product_id)
         if not product or product.archived:
-            abort(404, message="Product not found")
+            raise ProductNotFoundError()
         product.archived = True
         db.session.commit()
         return ""

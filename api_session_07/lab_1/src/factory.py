@@ -1,6 +1,7 @@
 from flask import Flask
 from flask_smorest import Api
 from .extensions import db, migrate
+from .errors import register_error_handlers
 from .models.products import product_bp
 
 def create_app(config=None):
@@ -20,6 +21,7 @@ def create_app(config=None):
     migrate.init_app(app, db)
     api = Api(app)
     api.register_blueprint(product_bp)
+    register_error_handlers(app)
 
     # This lab has no migration scripts yet; create the SQLite table on startup.
     with app.app_context():
