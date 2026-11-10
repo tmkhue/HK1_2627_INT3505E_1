@@ -1,7 +1,7 @@
 from http import HTTPStatus
-from http.client import HTTPException
+from werkzeug.exceptions import HTTPException
 
-from flask import current_app, jsonify
+from flask import current_app, g, jsonify
 
 
 class ApiError(Exception):
@@ -53,7 +53,14 @@ def register_error_handlers(app):
 
     @app.errorhandler(Exception)
     def _on_err(error):
-        current_app.logger.exception("Unhandled API exception", exc_info=error)
+        current_app.logger.exception(
+            "Unhandled API exception",
+            exc_info=error,
+            extra={
+                "event": "app.exception",
+                "request_id": getattr(g, "request_id", None),
+            },
+        )
         return _error_response(
             HTTPStatus.INTERNAL_SERVER_ERROR,
             "Internal server error",

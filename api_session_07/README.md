@@ -25,3 +25,5 @@ Patch
 ![alt text](image-7.png)
 Soft Delete
 ![alt text](image-8.png)
+### Hoàn thành tiếp đến phần gunicorn.conf.py
+![alt text](image-10.png)
