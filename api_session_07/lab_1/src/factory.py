@@ -7,7 +7,9 @@ from .config import DefaultConfig, ProductionConfig, TestingConfig
 from .errors import register_error_handlers
 from .extensions import db, migrate
 from .logging_config import configure_json_logging, register_request_logging
+from .health import health_bp
 from .models.products import product_bp
+from .models.orders import order_bp
 
 
 CONFIGS = {
@@ -61,6 +63,8 @@ def create_app(config=None):
 
     api = Api(app)
     api.register_blueprint(product_bp)
+    api.register_blueprint(order_bp)
+    app.register_blueprint(health_bp)
     register_error_handlers(app)
 
     # The lab has no migration scripts yet; create the table for local use.
