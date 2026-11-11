@@ -1,0 +1,34 @@
+extends: spectral:oas
+
+rules:
+  no-content-on-204:
+    description: A 204 response must not declare response content.
+    given: "$.paths[*][*].responses['204'].content"
+    severity: error
+    then:
+      function: falsy
+
+  book-year-must-be-integer:
+    description: Book.year must be an integer or nullable.
+    given: "$.components.schemas.Book.properties.year.type"
+    severity: error
+    then:
+      function: enumeration
+      functionOptions:
+        values:
+          - integer
+
+  response-200-must-have-schema:
+    description: Every 200 response must define a non-empty schema.
+    given: "$.paths[*][*].responses['200'].content['application/json'].schema"
+    severity: error
+    then:
+      function: truthy
+
+  get-books-operation-id:
+    description: GET /books must define an operationId.
+    given: "$.paths['/books'].get"
+    severity: error
+    then:
+      field: operationId
+      function: truthy
