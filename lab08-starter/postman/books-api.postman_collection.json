@@ -183,6 +183,93 @@
       ]
     }
   ],
+  "event": [
+    {
+      "name": "error-cases",
+      "item": [
+        {
+          "name": "POST /books — missing title",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/books",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "books"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"author\": \"Kleppmann\", \"year\": 2017}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 Bad Request\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"body has code and message\", () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.code).to.eql(\"VALIDATION_ERROR\");",
+                  "  pm.expect(body.message).to.eql(\"Invalid book data\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+
+    },
+    {
+      "name": "GET /books/9999 — missing id",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/books/9999",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "books",
+            "9999"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"404 Not Found\", () => pm.response.to.have.status(404));",
+              "pm.test(\"body has code and message\", () => {",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.code).to.eql(\"NOT_FOUND\");",
+              "  pm.expect(body.message).to.eql(\"Book not found\");",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
   "variable": [
     {
       "key": "book_id",

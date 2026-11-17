@@ -13,6 +13,7 @@ Useful imports:
     from tools import get_book_schema
 Do not depend on test execution order. Fixtures: client, app, sample_book.
 """
+from copy import deepcopy
 from jsonschema import validate, ValidationError
 import pytest
 from tools import get_book_schema
@@ -52,17 +53,33 @@ def test_created_book_can_be_deleted(client):
     assert delete_response.status_code == 204
     assert get_response.status_code == 404
 
+def _to_json_schema(openapi_schema):
+    schema = deepcopy(openapi_schema)
+    for prop in schema["properties"].values():
+        if prop.pop("nullable", False):
+            prop["type"] = [prop["type"], "null"]
+    return schema
 
-def test_response_extra_field_blocked(client, sample_book):
-    response = client.get(f"/books/{sample_book}")
-    book = response.get_json()
-    schema = get_book_schema()
-
+def test_response_extra_field_blocked(client):
+    created = client.post(
+        "/books",
+        json={"title": "API Design Patterns", "author": "J.J. Geewax",
+              "isbn": "9781617295850"},
+    )
+    assert created.status_code == 201
+    response = client.get(f"/books/{created.get_json()['id']}")
     assert response.status_code == 200
-    assert "password_hash" not in book
-    validate(book, schema)
-    response_with_password_hash = book.copy()
-    response_with_password_hash["password_hash"] = "must-not-be-exposed"
-
-    with pytest.raises(ValidationError):
-        validate(response_with_password_hash, schema)
+    book = response.get_json()
+ 
+    schema = _to_json_schema(get_book_schema())
+ 
+    validate(instance=book, schema=schema)
+ 
+    tampered = deepcopy(book)
+    tampered["unexpected_field"] = "should not be here"
+    with pytest.raises(ValidationError) as excinfo:
+        validate(instance=tampered, schema=schema)
+    assert excinfo.value.validator == "additionalProperties"
+ 
+    assert "unexpected_field" not in book
+    validate(instance=book, schema=schema)

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Books API — Lab08 Starter" tests="5" time="0.076">
+  <testsuite name="books / GET /books — initial list" id="308011f9-033a-4010-921c-308e524f9a87" timestamp="2026-11-17T05:07:01.167Z" tests="2" failures="0" errors="0" time="0.028">
+    <testcase name="200 OK" time="0.028" classname="BooksGetBooksInitialList"/>
+    <testcase name="body is array" time="0.028" classname="BooksGetBooksInitialList"/>
+  </testsuite>
+  <testsuite name="books / POST /books — create" id="7b56e902-8ac0-47a3-ba5f-ae7a7aa85baf" timestamp="2026-11-17T05:07:01.167Z" tests="2" failures="0" errors="0" time="0.013">
+    <testcase name="201 Created" time="0.013" classname="BooksPostBooksCreate"/>
+    <testcase name="positive id" time="0.013" classname="BooksPostBooksCreate"/>
+  </testsuite>
+  <testsuite name="books / GET /books/{id} — read" id="9a6f47a1-289d-4949-9b54-321d68a923f5" timestamp="2026-11-17T05:07:01.167Z" tests="2" failures="0" errors="0" time="0.008">
+    <testcase name="200 OK" time="0.008" classname="BooksGetBooksIdRead"/>
+    <testcase name="expected fields" time="0.008" classname="BooksGetBooksIdRead"/>
+  </testsuite>
+  <testsuite name="books / PUT /books/{id} — replace" id="6f551efb-f32f-4b45-a469-a5da56f0d6ec" timestamp="2026-11-17T05:07:01.167Z" tests="2" failures="0" errors="0" time="0.016">
+    <testcase name="200 OK" time="0.016" classname="BooksPutBooksIdReplace"/>
+    <testcase name="updated title" time="0.016" classname="BooksPutBooksIdReplace"/>
+  </testsuite>
+  <testsuite name="books / DELETE /books/{id} — delete" id="c5a2388f-8125-43ed-92c1-e045fe410b99" timestamp="2026-11-17T05:07:01.167Z" tests="2" failures="0" errors="0" time="0.011">
+    <testcase name="204 No Content" time="0.011" classname="BooksDeleteBooksIdDelete"/>
+    <testcase name="empty body" time="0.011" classname="BooksDeleteBooksIdDelete"/>
+  </testsuite>
+</testsuites>

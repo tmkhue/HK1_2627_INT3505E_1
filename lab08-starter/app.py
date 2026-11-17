@@ -37,6 +37,7 @@ def create_app(config=None, cfg=None):
     db.init_app(app)
 
     with app.app_context():
+        os.makedirs(app.instance_path, exist_ok=True)
         db.create_all()
 
     def error(status, code, message, errors=None):

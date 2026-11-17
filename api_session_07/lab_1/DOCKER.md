@@ -10,7 +10,7 @@
 Mở terminal tại thư mục `lab_1`, sau đó chạy:
 
 ```bash
-docker compose up --build -d
+docker compose exec api flask db upgrade
 ```
 
 Lần đầu Docker sẽ tải Python image, cài thư viện và build image. Các lần sau có thể chạy `docker compose up -d`. Không cần tạo `.env` hay chỉnh file cấu hình.
