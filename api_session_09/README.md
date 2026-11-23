@@ -10,3 +10,8 @@ test với 'X-API-Version: 2024-06-20'
 ![alt text](image-3.png)
 test unsupported version
 ![alt text](image-4.png)
+## Lab 3: Sunset middleware: decorator @deprecate_at
+test thời điểm trước sunset
+![alt text](image-5.png)
+test thời điểm sau sunset
+![alt text](image-6.png)
