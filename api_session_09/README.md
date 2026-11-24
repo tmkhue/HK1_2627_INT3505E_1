@@ -15,3 +15,11 @@ test thời điểm trước sunset
 ![alt text](image-5.png)
 test thời điểm sau sunset
 ![alt text](image-6.png)
+## Lab 4: Blue-Green routing
+test Cohort beta
+![alt text](image-7.png)
+![alt text](image-10.png)
+test Allow-listed Account
+![alt text](image-8.png)
+Test Account thông thường
+![alt text](image-9.png)
